@@ -374,7 +374,7 @@ class MTextView:  # view
 
 
 if __name__ == '__main__':
-    field = MField(rows=10, cols=10, mines_count=4)
+    field = MField(rows=10, cols=10, mines_count=10)
     game = MGame(field)
     if len(sys.argv) != 2:
         print('Usage: \n'
