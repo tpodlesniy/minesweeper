@@ -102,10 +102,27 @@ class MField:  # model
                     count += 1
         return count
 
+
     def open_near_cells(self, row, col):
-        print('Oops, recursive algorithm not implemented. Author is very lazy =)')
-
-
+        print(row, col)
+        neighbors = self.get_neighbors_mine_count(row, col)
+        self.data[row+1][col+1].open()
+        self.data[row+1][col].open()
+        self.data[row][col+1].open()
+        self.data[row-1][col].open()
+        self.data[row][col-1].open()
+        self.data[row - 1][col - 1].open()
+        self.data[row + 1][col - 1].open()
+        self.data[row - 1][col + 1].open()
+        if  row<9 and col<9 and row>-1 and col > -1:
+            self.open_near_cells(row+1, col+1)
+            self.open_near_cells(row + 1, col)
+            self.open_near_cells(row, col + 1)
+            self.open_near_cells(row-1, col)
+            self.open_near_cells(row, col-1)
+            self.open_near_cells(row - 1, col-1)
+            self.open_near_cells(row + 1, col-1)
+            self.open_near_cells(row - 1, col + 1)
 class MGame:  # controller
     def __init__(self, field):
         self.field = field
