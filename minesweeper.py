@@ -43,8 +43,17 @@ class MField:  # model
         self.rows = rows
         self.cols = cols
         self.mines_count = mines_count
+        self.mines = mines_count
         self.data = MField.create_field(cols, rows)
         self.set_mines(mines_count)
+        self.gameover = False
+        self.gamewin = False
+
+    def check_gameover(self):
+        cells_elapsed = self.get_cells_elapsed()
+        if cells_elapsed == 0 and self.mines == 0:
+            self.gameover = True
+            self.gamewin = True
 
     @staticmethod
     def create_field(cols, rows):
@@ -81,10 +90,23 @@ class MField:  # model
         return result
 
     def update_cell_state(self, row, col):
-        return self.data[row][col].next_state()
+        result = self.data[row][col].next_state()
+
+        if result == MCell.FLAGGED and self.data[row][col].is_mined:
+            self.mines -= 1
+        elif result == MCell.QUESTIONED and self.data[row][col].is_mined:
+            self.mines += 1
+
+        self.check_gameover()
 
     def open_cell(self, row, col):
-        return self.data[row][col].open()
+        result = self.data[row][col].open()
+        if self.get_neighbors_mine_count(row, col) == 0:
+            self.open_near_cells(row, col)
+        if result == 1:
+            self.gameover = True
+            self.gamewin = False
+        self.check_gameover()
 
     def get_selected_mine_count(self):
         count = 0
@@ -114,35 +136,28 @@ class MField:  # model
 class MGame:  # controller
     def __init__(self, field):
         self.field = field
-        self.rows = self.field.rows
-        self.cols = self.field.cols
-        self.mines = self.field.mines_count
         self.mines_initial = self.field.mines_count
-        self.gameover = False
-        self.gamewin = False
+
+    def get_rows_count(self):
+        return self.field.rows
+
+    def get_columns_count(self):
+        return self.field.cols
+
+    def get_mines_count(self):
+        return self.field.mines
+
+    def is_game_over(self):
+        return self.field.gameover
+
+    def is_game_win(self):
+        return self.field.gamewin
 
     def update_cell_state(self, row, col):
-        result = self.field.update_cell_state(row, col)
-        if result == MCell.FLAGGED and self.field.data[row][col].is_mined:
-            self.mines -= 1
-        elif result == MCell.QUESTIONED and self.field.data[row][col].is_mined:
-            self.mines += 1
-        self.check_gameover()
-
-    def check_gameover(self):
-        cells_elapsed = self.field.get_cells_elapsed()
-        if cells_elapsed == 0 and self.mines == 0:
-            self.gameover = True
-            self.gamewin = True
+        self.field.update_cell_state(row, col)
 
     def open_cell(self, row, col):
-        result = self.field.open_cell(row, col)
-        if self.field.get_neighbors_mine_count(row, col) == 0:
-            self.field.open_near_cells(row, col)
-        if result == 1:
-            self.gameover = True
-            self.gamewin = False
-        self.check_gameover()
+        self.field.open_cell(row, col)
 
 
 class MPGViewCell:
@@ -232,8 +247,8 @@ class MPGView:
         self.interface_font = pygame.font.SysFont('Comic Sans MS', 20, True)
         self.screen = pygame.display.set_mode(
             (
-                (self.game.cols + 2) * MPGViewCell.CELL_SIDE,
-                (self.game.rows + 2) * MPGViewCell.CELL_SIDE
+                (self.game.get_columns_count() + 2) * MPGViewCell.CELL_SIDE,
+                (self.game.get_rows_count() + 2) * MPGViewCell.CELL_SIDE
             )
         )
         self.pg_gameover = False
@@ -249,13 +264,13 @@ class MPGView:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.pg_gameover = True
-            elif not self.game.gameover:
+            elif not self.game.is_game_over():
                 if event.type == pygame.MOUSEMOTION:
                     self.x, self.y = event.pos
                     self.current_row = self.x // MPGViewCell.CELL_SIDE - 1
                     self.current_col = self.y // MPGViewCell.CELL_SIDE - 1
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if 0 <= self.current_row < self.game.rows and 0 <= self.current_col < self.game.cols:
+                    if 0 <= self.current_row < self.game.get_rows_count() and 0 <= self.current_col < self.game.get_columns_count():
                         if event.button == 1:
                             self.game.open_cell(self.current_row, self.current_col)
                         elif event.button == 3:
@@ -266,8 +281,8 @@ class MPGView:
         self.cell_drawer.draw(self.field.data[row][col], row, col, show_mines, neighbors_mine_count)
 
     def draw_field(self, show_mines=False):
-        for i in range(self.game.rows):
-            for j in range(self.game.cols):
+        for i in range(self.game.get_rows_count()):
+            for j in range(self.game.get_columns_count()):
                 self.draw_cell(i, j, show_mines)
 
     def draw_stats(self):
@@ -289,15 +304,15 @@ class MPGView:
         self.screen.fill((255, 255, 255))
         self.draw_stats()
         self.draw_debug()
-        self.draw_field(self.game.gameover and not self.game.gamewin)
+        self.draw_field(self.game.is_game_over() and not self.game.is_game_win())
         self.draw_game_result()
         pygame.display.flip()
 
     def draw_game_result(self):
-        if not self.game.gameover:
+        if not self.game.is_game_over():
             m = 'Game in process'
         else:
-            m = 'You win' if self.game.gamewin else 'You lose'
+            m = 'You win' if self.game.is_game_win() else 'You lose'
         ts = self.interface_font.render(m, False, (0, 0, 0))
         self.screen.blit(ts, (280, 5))
 
@@ -328,9 +343,9 @@ class MTextView:  # view
         for i in range(self.game.cols + 1):
             print('-', end='-')
         print('-')
-        for i in range(self.game.rows):
+        for i in range(self.game.get_rows_count()):
             print(i, end=' | ')
-            for j in range(self.game.cols):
+            for j in range(self.game.get_columns_count()):
                 self.draw_cell(i, j, show_mines)
                 print(end=' ')
             print(end='\n')
@@ -340,15 +355,15 @@ class MTextView:  # view
 
     def get_prompt(self):
         return 'Please, type in 3 numbers (row[0, {}], col[0, {}], action[0, 1]): '.format(
-            self.game.rows - 1,
-            self.game.cols - 1,
+            self.game.get_rows_count() - 1,
+            self.game.get_columns_count() - 1,
         )
 
     def read_step_data(self):
         prompt = self.get_prompt()
         row, col, action = map(int, input(self.get_prompt()).split())
-        while not 0 <= row < self.game.rows or \
-                not 0 <= col < self.game.cols or \
+        while not 0 <= row < self.game.get_rows_count() or \
+                not 0 <= col < self.game.get_columns_count() or \
                 not action in [0, 1]:
             row, col, action = map(int, input(prompt).split())
         return row, col, action
@@ -367,7 +382,7 @@ class MTextView:  # view
         while not self.game.gameover:
             self.step()
         self.draw_field(True)
-        if self.game.gamewin:
+        if self.game.game.is_game_win():
             print('You win')
         else:
             print('You loose')
